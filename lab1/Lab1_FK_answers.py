@@ -142,6 +142,8 @@ def part3_retarget_func(T_pose_bvh_path, A_pose_bvh_path):
         两个bvh的joint name顺序可能不一致哦(
         as_euler时也需要大写的XYZ
     """
+
+    #根据bone的index，找到motion data中对应数据的位置
     def index_bone_to_channel(index, flag):
         if flag == 't':
             end_bone_index = end_bone_index_t
@@ -152,6 +154,9 @@ def part3_retarget_func(T_pose_bvh_path, A_pose_bvh_path):
                 return index - i
         return index - len(end_bone_index)
     
+    #因为我们要把a pose 转变成a pose，所以需要把shoulder 后面所有的子bone都要旋转一下
+    #tpose和apose的区别其实就是肩膀旋转了一个角度，a变t的过程就是把肩膀旋转回去，但是我们一定要把后面所有的bone都旋转
+    #为什么所有的子bone都要旋转呢？如果你不旋转子bone的话 那么新的姿势就是子bone还是保持原来的apose但是肩膀变好了，想象一个人人体晾衣架
     def get_t2a_offset(bone_name):
         l_bone = ['lShoulder', 'lElbow', 'lWrist'] 
         r_bone = ['rShoulder', 'rElbow', 'rWrist']
@@ -161,12 +166,7 @@ def part3_retarget_func(T_pose_bvh_path, A_pose_bvh_path):
             return R.from_euler('XYZ', [0.,0.,-45.], degrees=True)
         return R.from_euler('XYZ', [0.,0.,0.], degrees=True)
 
-
-    motion_data = load_motion_data(A_pose_bvh_path)
-
-    t_name, t_parent, t_offset = part1_calculate_T_pose(T_pose_bvh_path)
-    a_name, a_parent, a_offset = part1_calculate_T_pose(A_pose_bvh_path)
-
+    #这个也是工具，辅助第一个工具函数的
     end_bone_index_t = []
     for i in range(len(t_name)):
         if t_name[i].endswith('_end'):
@@ -176,6 +176,16 @@ def part3_retarget_func(T_pose_bvh_path, A_pose_bvh_path):
     for i in range(len(a_name)):
         if a_name[i].endswith('_end'):
             end_bone_index_a.append(i)
+
+
+
+    #真正的代码从这里开始
+    motion_data = load_motion_data(A_pose_bvh_path)
+
+    t_name, t_parent, t_offset = part1_calculate_T_pose(T_pose_bvh_path)
+    a_name, a_parent, a_offset = part1_calculate_T_pose(A_pose_bvh_path)
+
+
 
     for m_i in range(len(motion_data)):
         frame = motion_data[m_i]
