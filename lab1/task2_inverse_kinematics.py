@@ -28,19 +28,30 @@ class MetaData:
         
         # 从end节点开始，一直往上找，直到找到腰部节点
         path1 = [self.joint_name.index(self.end_joint)]
-        while self.joint_parent[path1[-1]] != -1:
-            path1.append(self.joint_parent[path1[-1]])
+        while self.joint_parent[path1[-1]] != -1:   #这个一定要注意，最后root bone 也能加进来，可以自己画一下
+            path1.append(self.joint_parent[path1[-1]])  #如果 手部是end 那最后的path：手-arm-spine-root，但是请注意path存的是编号，编号用来在jointnames里找joint
             
-        # 从root节点开始，一直往上找，直到找到腰部节点
+        # 从root节点开始，一直往上找，直到找到腰部节点  （注意此root节点是 需要被固定的关节 而不是腰部ROOT）
         path2 = [self.joint_name.index(self.root_joint)]
-        while self.joint_parent[path2[-1]] != -1:
-            path2.append(self.joint_parent[path2[-1]])
+        while self.joint_parent[path2[-1]] != -1:  #这个一定要注意，最后root bone 也能加进来，可以自己画一下
+            path2.append(self.joint_parent[path2[-1]])    #如果 脚是fixed point 那最后的path：脚-leg-hip-root，但是请注意path存的是编号，编号用来在jointnames里找joint
         
+
+    # 上面的代码执行过后我们可以得到
+    # path1 = [9, 8, 7, 6, 5, 0]   # Wrist → Elbow → Shoulder → Chest → Spine → RootJoint
+    # path2 = [4, 3, 2, 1, 0]      # Foot → Ankle → Knee → Hip → RootJoint        
+
         # 合并路径，消去重复的节点
         while path1 and path2 and path2[-1] == path1[-1]:
             path1.pop()
             a = path2.pop()
-            
+
+#下面三行代码返回：
+# path = [4, 3, 2, 1, 0, 5, 6, 7, 8, 9]
+# path_name = ["Foot", "Ankle", "Knee", "Hip", "RootJoint", "Spine", "Chest", "Shoulder", "Elbow", "Wrist"]        
+# 如果fixed joint就是root bone：
+# path = [0, 5, 6, 7, 8, 9]
+#path_name = ["RootJoint", "Spine", "Chest", "Shoulder", "Elbow", "Wrist"]  
         path2.append(a)
         path = path2 + list(reversed(path1))
         path_name = [self.joint_name[i] for i in path]

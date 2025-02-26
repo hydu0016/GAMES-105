@@ -110,24 +110,15 @@ def part2_forward_kinematics(joint_name, joint_parent, joint_offset, motion_data
 
     count=1
 
-    for i in range(1,joint_num):
-        
+    for i in range(1,joint_num):        
         if joint_name[i].endswith('_end'):
-            joint_orientations[i]=      (R.from_quat(joint_orientations[joint_parent[i]])* (R.from_euler('XYZ', [0.,0.,0.], degrees=True))).as_quat()
+            joint_orientations[i]=(R.from_quat(joint_orientations[joint_parent[i]])* (R.from_euler('XYZ', [0.,0.,0.], degrees=True))).as_quat()
         else:        
-            joint_orientations[i]=      (R.from_quat(joint_orientations[joint_parent[i]])* R.from_euler('XYZ', motion_data[frame_id][3+count*3:6+count*3], degrees=True)).as_quat()
+            joint_orientations[i]=(R.from_quat(joint_orientations[joint_parent[i]])* R.from_euler('XYZ', motion_data[frame_id][3+count*3:6+count*3], degrees=True)).as_quat()
             count+=1
-
-        
-        
+            
         joint_positions[i]= joint_positions[joint_parent[i]]+np.dot(R.from_quat(joint_orientations[joint_parent[i]]).as_matrix(),joint_offset[i])
                 
-
-        
-
-    
-
-
 
     return joint_positions, joint_orientations
 
