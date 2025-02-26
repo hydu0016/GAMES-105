@@ -18,17 +18,17 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
         joint_orientations: 计算得到的关节朝向，是一个numpy数组，shape为(M, 4)，M为关节数
     """
 
-    #由于提供的joint_orientations是每个关节的朝向(global rotation)，所以我们必须要自己计算关节的本地旋转
+    #由于提供的joint_orientations是每个关节的朝向(global rotation->Q)，所以我们必须要自己计算关节的本地旋转(R)
     def get_joint_rotations():
         joint_rotations = np.empty(joint_orientations.shape)
         for i in range(len(joint_name)):
             if joint_parent[i] == -1:
                 joint_rotations[i] = R.from_euler('XYZ', [0.,0.,0.]).as_quat()
             else:
-                joint_rotations[i] = (R.from_quat(joint_orientations[joint_parent[i]]).inv() * R.from_quat(joint_orientations[i])).as_quat()
+                joint_rotations[i] = (R.from_quat(joint_orientations[joint_parent[i]]).inv() * R.from_quat(joint_orientations[i])).as_quat() #注意这里的inv(), 由于我们需要求每个关节的本地旋转R，但是我们知道这个关节的global旋转Q和父关节Q，那么本地旋转就是父关节Q的转置×本关节的Q
         return joint_rotations
 
-    #meta data里给了关节位置，但是没有给关节offset所以我们需要自己计算
+    #meta data里给了关节位置，但是没有给关节offset所以我们需要自己计算,计算方法就是这个关节的位置减去父关节的位置
     def get_joint_offsets():
         joint_offsets = np.empty(joint_positions.shape)
         for i in range(len(joint_name)):
@@ -45,12 +45,12 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
     end_joint = meta_data.end_joint
 
     path, path_name, path1, path2 = meta_data.get_path_from_root_to_end()
-    #如果Path2长度是1的话，说明这个path2直有一个root节点，那么就证明fixed joint到end joint不会经过root
+    #如果Path2长度是1的话，说明这个path2只有一个root节点，那么就证明fixed joint到end joint不会经过root
     if len(path2) == 1:
         path2 = []
 
     
-    # 根据每个关节目前的global orientation 计算得到每个joint的local rotation
+    # 根据每个关节目前的global orientation（Q） 计算得到每个joint的local rotation (R)
     joint_rotations = get_joint_rotations()
     # 根据每个关节的位置计算的到关节关节之间的offset
     joint_offsets = get_joint_offsets()
@@ -60,18 +60,18 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
     rotation_chain = np.empty((len(path), 3), dtype=float)
     offset_chain = np.empty((len(path), 3), dtype=float)
 
-    # 对chain进行初始化 注意下面的是 joint_orientations 存储的是global rotaion
-    if len(path2) > 1:
-        rotation_chain[0] = R.from_quat(joint_orientations[path2[1]]).inv().as_euler('XYZ') 
-    else:
-        rotation_chain[0] = R.from_quat(joint_orientations[path[0]]).as_euler('XYZ') 
+ 
 
     # position_chain[0] = joint_positions[path[0]]
     start_position = torch.tensor(joint_positions[path[0]], requires_grad=False)
     offset_chain[0] = np.array([0.,0.,0.])
 
 
-
+    # 对chain进行初始化
+    if len(path2) > 1:
+        rotation_chain[0] = R.from_quat(joint_orientations[path2[1]]).inv().as_euler('XYZ')
+    else:
+        rotation_chain[0] = R.from_quat(joint_orientations[path[0]]).as_euler('XYZ')
 
 
 
