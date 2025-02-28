@@ -79,7 +79,68 @@ import task2_inverse_kinematics
 
 
 
-"https://github.com/DIOYF/GamesPersonalHW/blob/main/games105/Lab1_IK.py"
+
+
+def practice(meta_data, joint_positions, joint_orientations, target_pose):
+    
+    
+    
+    joint_parent=meta_data.joint_parent
+    joint_offset=np.empty((len(joint_positions),3))
+
+    for i in range(len(joint_positions)):
+        joint_offset[i]=meta_data.joint_initial_position[i]-meta_data.joint_initial_position[joint_parent[i]]   
+    joint_offset[0]=[0.,0.,0.]
+
+    joint_ik_path,_,_,_=meta_data.get_path_from_root_to_end()
+
+    local_rotation=np.ematy((len(joint_orientations),4))
+
+    for i in range(len(joint_orientations)):
+        local_rotation[i]= R.from_quat(joint_orientations[joint_parent[i]]).inv() * R.from_quat(joint_orientations[i])
+
+    
+    joint_offset_t=[torch.tensor(data) for data in joint_offset]
+    joint_positions_t = [torch.tensor(data) for data in joint_positions]
+    joint_orientations_t = [torch.tensor(R.from_quat(data).as_matrix(), requires_grad=True) for data in joint_orientations]
+    local_rotation_t = [torch.tensor(data.as_matrix(),requires_grad=True) for data in local_rotation]
+    target_pose_t = torch.tensor(target_pose)
+
+
+    epoches=300
+    alpha=0.001
+
+    for i in range(epoches):
+        for j in range(len(joint_ik_path)):
+            a=cur_joint=joint_ik_path[j]
+            b=last_joint=joint_ik_path[j-1]
+            if j==0:
+                joint_orientations_t[joint_ik_path[j]]=joint_orientations_t[joint_ik_path[j]]
+                joint_positions_t[joint_ik_path[j]]=joint_positions_t[joint_ik_path[j]]
+            elif joint_parent[a]==b:
+                joint_orientations_t[a]=joint_orientations_t[b] @ local_rotation_t[a]
+                joint_positions_t[a]=joint_positions_t[b]+joint_offset_t[a] @ torch.transpose(joint_orientations_t[b],0,1)
+            else: #a parent  b child
+                joint_orientations_t[a]=joint_orientations_t[b] @ torch.transpose(local_rotation_t[b],0,1)
+
+
+
+        
+
+
+
+    
+
+
+
+
+
+    return 0
+
+
+
+
+#"https://github.com/DIOYF/GamesPersonalHW/blob/main/games105/Lab1_IK.py"
 def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, target_pose):
     """
     完成函数，计算逆运动学
@@ -152,14 +213,14 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
             elif joint_parent[a]==b: 
                 #当前节点是前一节点的子节点，说明这个chain正向
 
-                joint_orientations_t[a]=joint_orientations_t[b] @ local_rotation_t[a]   #正向的时候，计算子关节的Q。   Q_child= Q_parent * R_child                   
+                joint_orientations_t[a]=joint_orientations_t[b] @ local_rotation_t[a]   #正向的时候，计算子关节的Q。   Q_child= Q_parent * R_child                  #R.from_quat(joint_orientations_t[b]) * R.from_quat(local_rotation_t[a]) 为什么这里不是四元数哪种形式？     
                 joint_positions_t[a] = joint_positions_t[b] + joint_offset_t[a] @ torch.transpose(joint_orientations_t[b],0,1)    #正向的时候，计算子关节的位置。  Pos_child= Pos_parent+ Q_parent * offset_child
                 #这里为什么是torch.transpos而且旋转矩阵相乘在右边? 复制上面这行代码 搜noition
                                 
             else: 
                 #a=joint_parent[b] 如果当前节点是前一节点的父节点：说明现在是chain的逆向部分，比如chain是fixe_joint是foot然后end_effector是手，那么foot到root这部分在Chain上就是逆向的
                 joint_orientations[a]=joint_orientations_t[b] @ torch.transpose(local_rotation_t[b],0,1)   # a是b的parent.  由于 Q_b=Q_a * R_b  =》  Q_b * R_b(转置) = Q_a * R_b * R_b(转置) =》  Qa= Q_b * R_b(转置)
-                joint_positions_t[a]=joint_positions_t[b]+(-joint_offset_t[a])@torch.transpose(joint_orientations_t[a],0,1)  # a是b的parent  Pos_b= Pos_a+ Q_a * offset_b =》 Pos_a=Pos_b - Q_a * offset_b
+                joint_positions_t[a]=joint_positions_t[b]+(-joint_offset_t[b])@torch.transpose(joint_orientations_t[a],0,1)  # a是b的parent  Pos_b= Pos_a+ Q_a * offset_b =》 Pos_a=Pos_b - Q_a * offset_b
         
         # Calculate the error: the distance between the current end joint position and the target.
         optimize_target = torch.norm(joint_positions_t[joint_ik_path[-1]] - target_pose_t)
