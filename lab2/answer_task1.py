@@ -207,6 +207,14 @@ class BVHMotion():
         '''
         Ry = np.zeros_like(rotation)
         Rxz = np.zeros_like(rotation)
+
+
+        r=R.from_quat(rotation).as_euler('XYZ',degrees=True)
+
+        Ry=R.as_euler('XYZ',[0,r[1],0],degrees=True)
+
+        Rxz=Ry.inv() * R.from_quat(rotation)
+
         # TODO: 你的代码
         
         return Ry, Rxz
@@ -232,6 +240,42 @@ class BVHMotion():
         offset = target_translation_xz - res.joint_position[frame_num, 0, [0,2]]
         res.joint_position[:, 0, [0,2]] += offset
         # TODO: 你的代码
+
+        #  let all frame all root's rotation is specific rotation
+
+        cos_theta= np.dot(target_facing_direction_xz,np.array([0,1])) / np.linalg.norm(target_facing_direction_xz) * np.linalg.norm(np.array([0,1]))
+        sin_theta= np.cross(target_facing_direction_xz,np.array([0,1]))
+        angle=np.arccos(cos_theta)
+        if sin_theta>0:
+            angle= 2* np.pi - angle        
+        new_R_y=R.from_euler('y',angle)
+
+        frame_num_Ry,frame_num_Rxz=self.decompose_rotation_with_yaxis(R.from_quat(res.joint_rotation[frame_num,0,:]))
+
+        Rotation_needed=R.from_quat(new_R_y) * R.from_quat(frame_num_Ry).inv()
+
+        frames, joint_num, _ = res.joint_rotation.shape
+        for i in range(frames):
+            root_rotation=R.from_quat(res.joint_rotation[i,0])
+            res.joint_rotation[i,0] = R.from_quat(Rotation_needed * root_rotation)
+
+            
+        
+        for j in range(frame_num):
+
+            root_pos=res.joint_position[j,0,:]
+
+            res.joint_position[j,0,:]= Rotation_needed.as_matrix()@(root_pos-res.joint_position[frame_num,0,:]) +res.joint_position[frame_num,0,:]
+
+
+        return res
+
+        
+
+
+
+
+
         return res
 
 # part2

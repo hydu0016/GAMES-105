@@ -83,54 +83,53 @@ import task2_inverse_kinematics
 
 def practice(meta_data, joint_positions, joint_orientations, target_pose):
     
-    
-    
     joint_parent=meta_data.joint_parent
-    joint_offset=np.empty((len(joint_positions),3))
-
-    for i in range(len(joint_positions)):
-        joint_offset[i]=meta_data.joint_initial_position[i]-meta_data.joint_initial_position[joint_parent[i]]   
-    joint_offset[0]=[0.,0.,0.]
-
     joint_ik_path,_,_,_=meta_data.get_path_from_root_to_end()
 
-    local_rotation=np.ematy((len(joint_orientations),4))
+    local_rotation=np.empty(joint_orientations.shape)
+    joint_offset=[joint_positions.shape]
 
     for i in range(len(joint_orientations)):
         local_rotation[i]= R.from_quat(joint_orientations[joint_parent[i]]).inv() * R.from_quat(joint_orientations[i])
+    local_rotation[0]=R.from_quat(joint_orientations[0])
+
+    for i in range(len(joint_positions)):
+        joint_offset[i]=joint_positions[i]-joint_positions[joint_positions[joint_parent[i]]]
+    joint_offset[0]=np.array([0., 0., 0.])  
 
     
-    joint_offset_t=[torch.tensor(data) for data in joint_offset]
-    joint_positions_t = [torch.tensor(data) for data in joint_positions]
-    joint_orientations_t = [torch.tensor(R.from_quat(data).as_matrix(), requires_grad=True) for data in joint_orientations]
+
+    joint_offset_t=[]
+    for i in range(len(joint_offset)):
+        joint_offset_t.append(torch.tensor(joint_offset[i]))
+
+    
+    joint_positions_t=[torch.tensor(data) for data in range(len(joint_positions))]
+    joint_orientations_t=[torch.tensor(R.from_quat(data).as_matrix(), requires_grad=True) for data in range(len(joint_orientations))]
     local_rotation_t = [torch.tensor(data.as_matrix(),requires_grad=True) for data in local_rotation]
     target_pose_t = torch.tensor(target_pose)
 
-
-    epoches=300
+    
+    epoch=400
     alpha=0.001
 
-    for i in range(epoches):
+    for i in range(epoch):
         for j in range(len(joint_ik_path)):
-            a=cur_joint=joint_ik_path[j]
-            b=last_joint=joint_ik_path[j-1]
+            a=cur=j
+            b=pre=j-1
+
             if j==0:
-                joint_orientations_t[joint_ik_path[j]]=joint_orientations_t[joint_ik_path[j]]
-                joint_positions_t[joint_ik_path[j]]=joint_positions_t[joint_ik_path[j]]
+                joint_orientations_t[a]=joint_orientations_t[a]
+                joint_positions_t[a]=joint_orientations_t[a]
             elif joint_parent[a]==b:
-                joint_orientations_t[a]=joint_orientations_t[b] @ local_rotation_t[a]
-                joint_positions_t[a]=joint_positions_t[b]+joint_offset_t[a] @ torch.transpose(joint_orientations_t[b],0,1)
-            else: #a parent  b child
+                joint_orientations[a]= joint_orientations_t[b] @ local_rotation[a]
+                joint_positions_t[a]=joint_positions_t[b] + joint_offset_t[a] @ torch.transpose(joint_orientations_t[b],0,1)
+            else:
                 joint_orientations_t[a]=joint_orientations_t[b] @ torch.transpose(local_rotation_t[b],0,1)
-
-
-
+                joint_positions_t[a]=joint_positions_t[b] + (-joint_offset_t[b]) @ torch.transpose(joint_orientations_t[a],0,1)
         
-
-
-
-    
-
+        optimize_target=torch.norm(target_pose_t - joint_positions_t[-1])
+        optimize_target.backward()
 
 
 
@@ -187,7 +186,7 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
 
 
 
-    #  Convert our offsets, positions, and rotations into torch tensors.
+    #  Convert our offsets, positions, and rotations into torch tensors list  注意这里是tensor list 而不是单个tensor.
     # the joint_offset_t will look like: [tensor([0., 0., 0.]), tensor([1., 2., 3.]), ...]
     joint_offset_t = [torch.tensor(data) for data in joint_offset]
     # the joint_positionT will look like: [tensor([0., 0., 0.]), tensor([1., 2., 3.]), ...]
@@ -220,7 +219,7 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
             else: 
                 #a=joint_parent[b] 如果当前节点是前一节点的父节点：说明现在是chain的逆向部分，比如chain是fixe_joint是foot然后end_effector是手，那么foot到root这部分在Chain上就是逆向的
                 joint_orientations[a]=joint_orientations_t[b] @ torch.transpose(local_rotation_t[b],0,1)   # a是b的parent.  由于 Q_b=Q_a * R_b  =》  Q_b * R_b(转置) = Q_a * R_b * R_b(转置) =》  Qa= Q_b * R_b(转置)
-                joint_positions_t[a]=joint_positions_t[b]+(-joint_offset_t[b])@torch.transpose(joint_orientations_t[a],0,1)  # a是b的parent  Pos_b= Pos_a+ Q_a * offset_b =》 Pos_a=Pos_b - Q_a * offset_b
+                joint_positions_t[a]=joint_positions_t[b]+(-joint_offset_t[b])@torch.transpose(joint_orientations_t[a],0,1)  # a是b的parent  Pos_b= Pos_a+ Q_a * offset_b =》 Pos_a=Pos_b - Q_a * offset_b   
         
         # Calculate the error: the distance between the current end joint position and the target.
         optimize_target = torch.norm(joint_positions_t[joint_ik_path[-1]] - target_pose_t)
