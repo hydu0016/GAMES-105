@@ -64,8 +64,8 @@ def load_motion_data(bvh_path):
         for line in lines[i+1:]:
             data = [float(x) for x in line.split()]
             if len(data) == 0:
-                break
-            motion_data.append(np.array(data).reshape(1,-1))
+                break 
+            motion_data.append(np.array(data).reshape(1,-1))   #reshape(1,-1) reshape into a row vector(1 row, many columns)
         motion_data = np.concatenate(motion_data, axis=0)
     return motion_data
 
@@ -205,17 +205,15 @@ class BVHMotion():
         输入: rotation 形状为(4,)的ndarray, 四元数旋转
         输出: Ry, Rxz，分别为绕y轴的旋转和转轴在xz平面的旋转，并满足R = Ry * Rxz
         '''
-        Ry = np.zeros_like(rotation)
-        Rxz = np.zeros_like(rotation)
-
-
-        r=R.from_quat(rotation).as_euler('XYZ',degrees=True)
-
-        Ry=R.as_euler('XYZ',[0,r[1],0],degrees=True)
-
-        Rxz=Ry.inv() * R.from_quat(rotation)
-
         # TODO: 你的代码
+        # 将四元数旋转分解为绕y轴的旋转，和转轴在xz平面的旋转，先得到Ry，再逆运算得到Rxz
+        Ry = R.from_quat(rotation).as_euler("XYZ", degrees=True)
+        Ry = R.from_euler("XYZ", [0, Ry[1], 0], degrees=True)
+
+        # Ry = R.from_quat(rotation).
+
+        Rxz = Ry.inv() * R.from_quat(rotation)
+
         
         return Ry, Rxz
     
@@ -238,43 +236,20 @@ class BVHMotion():
         
         # 比如说，你可以这样调整第frame_num帧的根节点平移
         offset = target_translation_xz - res.joint_position[frame_num, 0, [0,2]]
-        res.joint_position[:, 0, [0,2]] += offset
+        res.joint_position[:, 0, [0, 2]] += offset
         # TODO: 你的代码
 
-        #  let all frame all root's rotation is specific rotation
+        sin_theta_xz = np.cross(target_facing_direction_xz, np.array([0, 1])) / np.linalg.norm(target_facing_direction_xz)
+        cos_theta_xz = np.dot(target_facing_direction_xz, np.array([0, 1])) / np.linalg.norm(target_facing_direction_xz)
+        theta = np.arccos(cos_theta_xz)
+        if sin_theta_xz < 0:    #新的方向位置在右边
+            theta = 2 * np.pi - theta
+        new_root_Ry = R.from_euler("Y", theta, degrees=False)
+        R_y, _ = self.decompose_rotation_with_yaxis(res.joint_rotation[frame_num, 0, :])
 
-        cos_theta= np.dot(target_facing_direction_xz,np.array([0,1])) / np.linalg.norm(target_facing_direction_xz) * np.linalg.norm(np.array([0,1]))
-        sin_theta= np.cross(target_facing_direction_xz,np.array([0,1]))
-        angle=np.arccos(cos_theta)
-        if sin_theta>0:
-            angle= 2* np.pi - angle        
-        new_R_y=R.from_euler('y',angle)
-
-        frame_num_Ry,frame_num_Rxz=self.decompose_rotation_with_yaxis(R.from_quat(res.joint_rotation[frame_num,0,:]))
-
-        Rotation_needed=R.from_quat(new_R_y) * R.from_quat(frame_num_Ry).inv()
-
-        frames, joint_num, _ = res.joint_rotation.shape
-        for i in range(frames):
-            root_rotation=R.from_quat(res.joint_rotation[i,0])
-            res.joint_rotation[i,0] = R.from_quat(Rotation_needed * root_rotation)
-
-            
-        
-        for j in range(frame_num):
-
-            root_pos=res.joint_position[j,0,:]
-
-            res.joint_position[j,0,:]= Rotation_needed.as_matrix()@(root_pos-res.joint_position[frame_num,0,:]) +res.joint_position[frame_num,0,:]
-
-
-        return res
-
-        
-
-
-
-
+        res.joint_rotation[:, 0, :] = (new_root_Ry * R_y.inv() * R.from_quat(res.joint_rotation[:, 0, :])).as_quat()
+        for i in range(len(res.joint_position)):
+             res.joint_position[i, 0,:] = (new_root_Ry * R_y.inv()).as_matrix()  @ (res.joint_position[i, 0, :] - res.joint_position[frame_num, 0, :]) + res.joint_position[frame_num,0,:]
 
         return res
 
@@ -294,6 +269,20 @@ def blend_two_motions(bvh_motion1, bvh_motion2, alpha):
     res.joint_rotation[...,3] = 1.0
 
     # TODO: 你的代码
+    n1=len(bvh_motion1)
+    n2=len(bvh_motion2)
+    n3=len(alpha)
+
+    for i in range(n3):
+        j= (i*n1) / n3
+        k= (i*n2)/n3
+
+        for u in range(bvh_motion1.shape[1]):
+            res.joint_position[i,u,:]= (1-alpha[i]) * bvh_motion1[j,u,:] + alpha[i] * bvh_motion2[k,u,:]
+        
+        for o in range(bvh_motion1.shape[1]):
+            res.joint_rotation[i,o,:]= Slerp(bvh_motion1[j,o,:],bvh_motion2[k,o,:],alpha[i])
+        
     
     return res
 
