@@ -313,8 +313,40 @@ def concatenate_two_motions(bvh_motion1, bvh_motion2, mix_frame1, mix_time):
     
     # TODO: 你的代码
     # 下面这种直接拼肯定是不行的(
-    res.joint_position = np.concatenate([res.joint_position[:mix_frame1], bvh_motion2.joint_position], axis=0)
-    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1], bvh_motion2.joint_rotation], axis=0)
+
+    ###
+    # 把motion2的的第一帧与motion1最后一帧的位置和旋转对齐
+    #求目标位置
+    rot = bvh_motion1.joint_rotation[mix_frame1, 0]
+    #求目标旋转
+    facing_axis = R.from_quat(rot).apply(np.array([0, 0, 1])).flatten()[[0, 2]]
+    #使用part1的函数，得到一个新的motion2动作序列
+    new_bvh_motion2 = bvh_motion2.translation_and_rotation(0, bvh_motion1.joint_position[mix_frame1, 0, [0, 2]], facing_axis)
+
+    # 进行动画blending,分别使用惯性混合和线性插值方法
+    blending_joint_position = np.zeros((mix_time, new_bvh_motion2.joint_position.shape[1], new_bvh_motion2.joint_position.shape[2]))
+    blending_joint_rotation = np.zeros((mix_time, new_bvh_motion2.joint_rotation.shape[1], new_bvh_motion2.joint_rotation.shape[2]))
+    blending_joint_rotation[..., 3] = 1.0
+
+
+    # 线性blending，动画增加30帧
+    for i in range(mix_time):
+        t = i / mix_time
+        blending_joint_position[i] = (1-t) * res.joint_position[mix_frame1] + t * new_bvh_motion2.joint_position[0]
+        for j in range(len(res.joint_rotation[mix_frame1])):
+            blending_joint_rotation[i, j] = slerp(res.joint_rotation[mix_frame1,j], new_bvh_motion2.joint_rotation[0,j], t)
+    new_bvh_motion2.joint_position = np.concatenate([blending_joint_position,  new_bvh_motion2.joint_position], axis=0)
+    new_bvh_motion2.joint_rotation = np.concatenate([blending_joint_rotation,  new_bvh_motion2.joint_rotation], axis=0)
+
+
+    res.joint_position = np.concatenate([res.joint_position[:mix_frame1],  new_bvh_motion2.joint_position], axis=0)
+    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1],  new_bvh_motion2.joint_rotation], axis=0)
+
+
+
+
+    
+
     
     return res
 
